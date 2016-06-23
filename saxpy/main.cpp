@@ -11,7 +11,7 @@
 #include <fstream>
 
 #ifdef __APPLE__
-	#include "OpenCL/opencl.h"
+    #include "OpenCL/opencl.h"
 #else
     #include "CL/cl.hpp"
 #endif
@@ -19,9 +19,9 @@
 /** Load the kernel in from the file name into a string object */
 std::string LoadKernel(const char* name)
 {
-	std::ifstream in(name);
-	std::string sourceCode((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-	return sourceCode;
+    std::ifstream in(name);
+    std::string sourceCode((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    return sourceCode;
 }
 
 int main()
