@@ -19,6 +19,10 @@
 //
 ///////////////////////////////////////////////////////////////////////////////
 
+// Compile with the following command
+// nvcc 2dLB.cu -I/usr/include/cuda -lGL -lglut -lGLEW
+// Where -I/usr/include/cuda is the location of the CUDA includes
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <GL/glew.h>
