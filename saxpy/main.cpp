@@ -1,34 +1,29 @@
+
 /*
- *  To compile use
- *  g++ -std=c++11 main.cpp -lOpenCL
- *
  *  Code based on the example by Jesse Laning
  */
 
-#include <iostream>
-#include <vector>
-#include <string>
 #include <fstream>
+#include <iostream>
+#include <string>
+#include <vector>
+#include <algorithm>
 
-#ifdef __APPLE__
-    #include "OpenCL/opencl.h"
-#else
-    #include "CL/cl.hpp"
-#endif
+#define CL_HPP_TARGET_OPENCL_VERSION 200
+
+#include "CL/cl2.hpp"
 
 /** Load the kernel in from the file name into a string object */
-std::string LoadKernel(const char* name)
+std::string load_kernel_source(std::string const name)
 {
-    std::ifstream in(name);
-    std::string sourceCode((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-    return sourceCode;
+    std::ifstream in(name.c_str());
+    std::string source_code((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    return source_code;
 }
 
-int main()
+int main(int const argc, char* argv[])
 {
-    const int size = 10;
-    float x[] = { 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0 };
-    float y[] = { 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0 };
+    std::vector<float> x(100'000'000, 1.0f), y(100'000'000, 1.0f);
 
     // Populate with the available platforms
     std::vector<cl::Platform> platforms;
@@ -36,41 +31,59 @@ int main()
 
     if (platforms.size() == 0)
     {
-    	std::cout << "No OpenCL platforms found" << std::endl;
-    	exit(1);
+        throw std::domain_error("No OpenCL platforms found");
     }
 
-    std::cout << "The number of platforms is " << platforms.size() << "\n";
+    std::cout << "Number of platforms: " << platforms.size() << "\n";
 
-    // Create a stl vector to store all of the availbe devices to use from the first platform.
-    std::vector<cl::Device> devices;
+    {
+        std::int32_t platform_counter{0};
+
+        for (auto const& platform : platforms)
+        {
+            std::string output;
+            platform.getInfo(CL_PLATFORM_NAME, &output);
+
+            std::cout << "Platform " << platform_counter << ": " << output << std::endl;
+
+            platform_counter++;
+        }
+    }
 
     // TODO Use some method of getting the best OpenCL device
     const int platformId = 0;
 
+    std::cout << "Using platform " << platformId << "\n";
+
+    // Create a stl vector to store all of the availbe devices to use from the first
+    // platform.
+    std::vector<cl::Device> devices;
+
     // Get the available devices from the platform.
     platforms[platformId].getDevices(CL_DEVICE_TYPE_ALL, &devices);
+
+    std::cout << "Number of devices found: " << devices.size() << "\n";
 
     // Set the device to the first device in the platform.
     // You can have more than one device associated with a single platform,
     // for instance if you had two of the same GPUs on your system in SLI or CrossFire.
-    cl::Device device = devices[0];
+    cl::Device device = devices.at(0);
 
     // This is just helpful to see what device and platform you are using.
-    std::cout << "Using device: "   << device.getInfo<CL_DEVICE_NAME>() << std::endl;
+    std::cout << "Using device: " << device.getInfo<CL_DEVICE_NAME>() << std::endl;
     std::cout << "Using platform: " << platforms[platformId].getInfo<CL_PLATFORM_NAME>() << std::endl;
 
     // Finally create the OpenCL context from the device you have chosen.
     cl::Context context(device);
 
-    cl::Buffer ocl_x(context, CL_MEM_READ_WRITE, sizeof(float) * size);
-    cl::Buffer ocl_y(context, CL_MEM_READ_WRITE, sizeof(float) * size);
+    cl::Buffer ocl_x(context, CL_MEM_READ_WRITE, sizeof(float) * x.size());
+    cl::Buffer ocl_y(context, CL_MEM_READ_WRITE, sizeof(float) * y.size());
 
     // A source object for your program
-    cl::Program::Sources sources;
-    std::string kernel_code = LoadKernel("kernels/saxpy.cl");
+    std::string kernel_code = load_kernel_source("../kernels/saxpy.cl");
 
     // Add your program source
+    cl::Program::Sources sources;
     sources.push_back({kernel_code.c_str(), kernel_code.length()});
 
     // Create your OpenCL program and build it.
@@ -79,8 +92,8 @@ int main()
     if (program.build({device}) != CL_SUCCESS)
     {
         // Print the build log to find any issues with your source
-    	std::cout << " Error building: " << program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(device) << std::endl;
-    	return 1;
+        throw std::domain_error("Error building: "
+                                + program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(device));
     }
 
     // Create our kernel where the "<>" is the name of the OpenCL kernel
@@ -94,32 +107,33 @@ int main()
     cl::CommandQueue queue(context, device, 0, nullptr);
 
     // Write our buffers that we are adding to our OpenCL device
-    queue.enqueueWriteBuffer(ocl_x, CL_TRUE, 0, sizeof(float) * size, x);
-    queue.enqueueWriteBuffer(ocl_y, CL_TRUE, 0, sizeof(float) * size, y);
+    queue.enqueueWriteBuffer(ocl_x, CL_TRUE, 0, sizeof(float) * x.size(), x.data());
+    queue.enqueueWriteBuffer(ocl_y, CL_TRUE, 0, sizeof(float) * y.size(), y.data());
     queue.finish();
 
     // Create an event that we can use to wait for our program to finish running
     cl::Event event;
 
-    // This runs our program, the ranges here are the offset, global, local ranges that our code runs in.
-    queue.enqueueNDRangeKernel( saxpy,
-                                cl::NullRange,     // Offset
-                                cl::NDRange(size), // Global size
-                                cl::NullRange,     // Local offset
-                                0,                 // Local size
-                                &event);
+    // This runs our program, the ranges here are the offset, global, local ranges that
+    // our code runs in.
+    queue.enqueueNDRangeKernel(saxpy,
+                               cl::NullRange,         // Offset
+                               cl::NDRange(x.size()), // Global size
+                               cl::NullRange,         // Local offset
+                               NULL,                  // Local size
+                               &event);
     event.wait();
 
     // Reads the output written to our buffer into our final array
-    queue.enqueueReadBuffer(ocl_y, CL_TRUE, 0, sizeof(float) * size, y);
+    queue.enqueueReadBuffer(ocl_y, CL_TRUE, 0, sizeof(float) * x.size(), y.data());
     queue.finish();
 
     // Prints the array
-    std::cout << "Result for saxpy kernel\n";
-    for (int i = 0; i < size; i++)
+    if (std::any_of(begin(y), end(y), [](auto const i) { return i != 3; }))
     {
-    	std::cout << "y[" << i << "] = " << y[i] << std::endl;
+        throw std::domain_error("saxpy computation was not successful");
     }
+    std::cout << "\nComputation successful\n\n";
 
     return 0;
 }
