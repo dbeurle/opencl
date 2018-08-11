@@ -7,7 +7,11 @@ find_package(GLUT REQUIRED)
 find_package(GLEW REQUIRED)
 find_package(OpenGL COMPONENTS OpenGL REQUIRED)
 
-add_executable(lb 2dLB.cu)
+add_executable(lbm_cuda 2dLB.cu)
+add_executable(lbm_cpp 2dLB.cpp)
 
-target_compile_features(lb PUBLIC cxx_std_11)
-target_link_libraries(lb GLUT::GLUT GLEW::GLEW OpenGL::GL)
+target_compile_features(lbm_cuda PUBLIC cxx_std_11)
+target_compile_features(lbm_cpp PUBLIC cxx_std_11)
+
+target_link_libraries(lbm_cuda GLUT::GLUT GLEW::GLEW OpenGL::GL)
+target_link_libraries(lbm_cpp GLUT::GLUT GLEW::GLEW OpenGL::GL)

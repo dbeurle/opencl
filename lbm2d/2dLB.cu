@@ -31,7 +31,7 @@
 constexpr int TILE_I = 16;
 constexpr int TILE_J = 16;
 
-constexpr int I2D(int ni, int i, int j) { return (ni * j) + i; }
+constexpr int I2D(int ni, int i, int j) { return ni * j + i; }
 
 // Check the CUDA errors using the form from talonmies on SO:
 // http://stackoverflow.com/questions/14038589/what-is-the-canonical-way-to-check-for-errors-using-the-cuda-runtime-api
