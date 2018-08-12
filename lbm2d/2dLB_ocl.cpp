@@ -5,7 +5,13 @@
 #include <vector>
 #include <algorithm>
 
-#define CL_HPP_TARGET_OPENCL_VERSION 200
+#define USE_NVIDIA_DEVICE
+
+#ifdef USE_NVIDIA_DEVICE
+// Doesn't work with nvidia backend otherwise
+#define CL_HPP_TARGET_OPENCL_VERSION 120
+#define CL_HPP_MINIMUM_OPENCL_VERSION 120
+#endif
 
 #include "CL/cl2.hpp"
 
@@ -19,13 +25,11 @@ inline std::string load_kernel_source(std::string&& name)
 
 int main(int const argc, char* argv[])
 {
-    std::vector<float> x(100'000, 1.0f), y(100'000, 1.0f);
-
     // Populate with the available platforms
     std::vector<cl::Platform> platforms;
     cl::Platform::get(&platforms);
 
-    if (platforms.size() == 0)
+    if (platforms.empty())
     {
         throw std::domain_error("No OpenCL platforms found");
     }
@@ -72,8 +76,10 @@ int main(int const argc, char* argv[])
     // Finally create the OpenCL context from the device you have chosen.
     cl::Context context(device);
 
-    cl::Buffer ocl_x(context, CL_MEM_READ_WRITE, sizeof(float) * x.size());
-    cl::Buffer ocl_y(context, CL_MEM_READ_WRITE, sizeof(float) * y.size());
+    std::vector<float> x(100'000, 1.0f), y(100'000, 1.0f);
+
+    cl::Buffer device_x(context, CL_MEM_READ_WRITE, sizeof(float) * x.size());
+    cl::Buffer device_y(context, CL_MEM_READ_WRITE, sizeof(float) * y.size());
 
     // A source object for your program
     std::string kernel_code = load_kernel_source("../ocl/kernels/saxpy.cl");
@@ -96,19 +102,20 @@ int main(int const argc, char* argv[])
     cl::Kernel saxpy(program, "saxpy");
 
     // Set our arguments for the kernel (x, y, a)
-    saxpy.setArg(0, ocl_x);
-    saxpy.setArg(1, ocl_y);
+    saxpy.setArg(0, device_x);
+    saxpy.setArg(1, device_y);
     saxpy.setArg(2, 2.0f);
 
     cl::CommandQueue queue(context, device, 0, nullptr);
 
     // Write our buffers that we are adding to our OpenCL device
-    queue.enqueueWriteBuffer(ocl_x, CL_TRUE, 0, sizeof(float) * x.size(), x.data());
-    queue.enqueueWriteBuffer(ocl_y, CL_TRUE, 0, sizeof(float) * y.size(), y.data());
-    queue.finish();
+    queue.enqueueWriteBuffer(device_x, CL_TRUE, 0, sizeof(float) * x.size(), x.data());
+    queue.enqueueWriteBuffer(device_y, CL_TRUE, 0, sizeof(float) * y.size(), y.data());
 
     // Create an event that we can use to wait for our program to finish running
     cl::Event event;
+
+    queue.finish();
 
     // This runs our program, the ranges here are the offset, global, local ranges that
     // our code runs in.
@@ -121,14 +128,14 @@ int main(int const argc, char* argv[])
     event.wait();
 
     // Reads the output written to our buffer into our final array
-    queue.enqueueReadBuffer(ocl_y, CL_TRUE, 0, sizeof(float) * x.size(), y.data());
+    queue.enqueueReadBuffer(device_y, CL_TRUE, 0, sizeof(decltype(x)::value_type) * x.size(), y.data());
     queue.finish();
 
-    if (std::any_of(begin(y), end(y), [](auto const i) { return i != 3.0f; }))
+    // A very dubuous check
+    if (std::none_of(begin(y), end(y), [](auto const i) { return i == 3.0f; }))
     {
         throw std::domain_error("saxpy computation was not successful");
     }
-
     std::cout << "\nComputation successful\n\n";
 
     return 0;
