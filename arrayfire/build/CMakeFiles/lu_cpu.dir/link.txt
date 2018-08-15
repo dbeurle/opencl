@@ -1,1 +1,0 @@
-/usr/bin/c++  -O3 -DNDEBUG -march=native  -rdynamic CMakeFiles/lu_cpu.dir/lu.cpp.o  -o lu_cpu -Wl,-rpath,/usr/local/lib64 /usr/local/lib64/libafcpu.so.3.7.0 

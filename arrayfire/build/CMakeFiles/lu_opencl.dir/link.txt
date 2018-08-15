@@ -1,1 +1,0 @@
-/usr/bin/c++  -O3 -DNDEBUG -march=native  -rdynamic CMakeFiles/lu_opencl.dir/lu.cpp.o  -o lu_opencl -Wl,-rpath,/usr/local/lib64 /usr/local/lib64/libafopencl.so.3.7.0 
