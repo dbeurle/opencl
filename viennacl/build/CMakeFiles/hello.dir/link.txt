@@ -1,0 +1,1 @@
+/usr/bin/c++  -O2 -DNDEBUG  -rdynamic CMakeFiles/hello.dir/viennacl_svd.cpp.o  -o hello -lOpenCL 

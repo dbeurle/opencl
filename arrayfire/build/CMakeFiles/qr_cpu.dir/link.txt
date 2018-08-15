@@ -1,0 +1,1 @@
+/usr/bin/c++  -O3 -DNDEBUG -march=native  -rdynamic CMakeFiles/qr_cpu.dir/qr.cpp.o  -o qr_cpu -Wl,-rpath,/usr/local/lib64 /usr/local/lib64/libafcpu.so.3.7.0 
