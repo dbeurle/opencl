@@ -1,0 +1,3 @@
+/home/alameddin/test/viennacl/build/CMakeFiles/rebuild_cache.dir
+/home/alameddin/test/viennacl/build/CMakeFiles/hello.dir
+/home/alameddin/test/viennacl/build/CMakeFiles/edit_cache.dir
