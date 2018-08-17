@@ -3,6 +3,6 @@ OpenCL short examples with C++
 
 ## SVD computation
 
-Benchmark | Framework | Hardware | Time (s) |
+Benchmark | Framework | Device | Time (s) |
 --- | --- | --- | --- |
-Bidiagonisation | GPU | Intel iGPU | 0.0 |
+Bidiagonisation | OpenCL | Intel iGPU | 0.0 |
