@@ -25,59 +25,62 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+
 #include <GL/glew.h>
 #include <GL/glut.h>
+
 #include <cuda_runtime_api.h>
 #include <cuda_gl_interop.h>
 
 const int TILE_I = 16;
 const int TILE_J = 8;
-#define I2D(ni,i,j) (((ni)*(j)) + i)
+#define I2D(ni, i, j) (((ni) * (j)) + i)
 
 // Check the CUDA errors using the form from talonmies on SO:
 // http://stackoverflow.com/questions/14038589/what-is-the-canonical-way-to-check-for-errors-using-the-cuda-runtime-api
-#define checkCuda(ans) { cudaAssert((ans), __FILE__, __LINE__); }
-inline void cudaAssert(cudaError_t code, const char *file, int line, bool abort=true)
+#define checkCuda(ans)                                                                             \
+    {                                                                                              \
+        cudaAssert((ans), __FILE__, __LINE__);                                                     \
+    }
+inline void cudaAssert(cudaError_t code, const char* file, int line, bool abort = true)
 {
-   if (code != cudaSuccess)
-   {
-      fprintf(stderr,"GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
-      if (abort) exit(code);
-   }
+    if (code != cudaSuccess)
+    {
+        fprintf(stderr, "GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
+        if (abort) exit(code);
+    }
 }
-
 
 // OpenGL pixel buffer object and texture //
 GLuint gl_PBO, gl_Tex;
 
 // arrays on host //
 float *f0, *f1, *f2, *f3, *f4, *f5, *f6, *f7, *f8, *plot;
-int *solid;
+int* solid;
 unsigned int *cmap_rgba, *plot_rgba; // rgba arrays for plotting
 
 // arrays on device //
 float *f0_data, *f1_data, *f2_data, *f3_data, *f4_data;
 float *f5_data, *f6_data, *f7_data, *f8_data, *plot_data;
-int *solid_data;
+int* solid_data;
 unsigned int *cmap_rgba_data, *plot_rgba_data;
 
 // textures on device //
-texture<float, 2> f1_tex, f2_tex, f3_tex, f4_tex,
-                  f5_tex, f6_tex, f7_tex, f8_tex;
+texture<float, 2> f1_tex, f2_tex, f3_tex, f4_tex, f5_tex, f6_tex, f7_tex, f8_tex;
 
 // CUDA special format arrays on device //
 cudaArray *f1_array, *f2_array, *f3_array, *f4_array;
 cudaArray *f5_array, *f6_array, *f7_array, *f8_array;
 
 // scalars //
-float tau,faceq1,faceq2,faceq3;
+float tau, faceq1, faceq2, faceq3;
 float vxin, roout;
 float width, height;
 float minvar, maxvar;
 
-int ni,nj;
+int ni, nj;
 int nsolid, nstep, nsteps, ncol;
-int ipos_old,jpos_old,draw_solid_flag;
+int ipos_old, jpos_old, draw_solid_flag;
 
 size_t pitch;
 
@@ -88,32 +91,68 @@ void mouse(int button, int state, int x, int y);
 void mouse_motion(int x, int y);
 
 // CUDA kernel prototypes
-__global__ void stream_kernel( int pitch, float *f1_data, float *f2_data,
-                               float *f3_data, float *f4_data, float *f5_data, float *f6_data,
-                               float *f7_data, float *f8_data);
+__global__ void stream_kernel(int pitch,
+                              float* f1_data,
+                              float* f2_data,
+                              float* f3_data,
+                              float* f4_data,
+                              float* f5_data,
+                              float* f6_data,
+                              float* f7_data,
+                              float* f8_data);
 
-__global__ void collide_kernel( int pitch, float tau, float faceq1, float faceq2, float faceq3,
-                                float *f0_data, float *f1_data, float *f2_data,
-                                float *f3_data, float *f4_data, float *f5_data, float *f6_data,
-                                float *f7_data, float *f8_data, float *plot_data);
+__global__ void collide_kernel(int pitch,
+                               float tau,
+                               float faceq1,
+                               float faceq2,
+                               float faceq3,
+                               float* f0_data,
+                               float* f1_data,
+                               float* f2_data,
+                               float* f3_data,
+                               float* f4_data,
+                               float* f5_data,
+                               float* f6_data,
+                               float* f7_data,
+                               float* f8_data,
+                               float* plot_data);
 
-__global__ void apply_Periodic_BC_kernel( int ni, int nj, int pitch,
-					                      float *f2_data, float *f4_data,
-                                          float *f5_data, float *f6_data,
-                                          float *f7_data, float *f8_data);
+__global__ void apply_Periodic_BC_kernel(int ni,
+                                         int nj,
+                                         int pitch,
+                                         float* f2_data,
+                                         float* f4_data,
+                                         float* f5_data,
+                                         float* f6_data,
+                                         float* f7_data,
+                                         float* f8_data);
 
-__global__ void apply_BCs_kernel( int ni, int nj, int pitch, float vxin, float roout,
-                                  float faceq2, float faceq3,
-                                  float *f0_data, float *f1_data, float *f2_data,
-                                  float *f3_data, float *f4_data, float *f5_data,
-                                  float *f6_data, float *f7_data, float *f8_data,
-                                  int* solid_data);
+__global__ void apply_BCs_kernel(int ni,
+                                 int nj,
+                                 int pitch,
+                                 float vxin,
+                                 float roout,
+                                 float faceq2,
+                                 float faceq3,
+                                 float* f0_data,
+                                 float* f1_data,
+                                 float* f2_data,
+                                 float* f3_data,
+                                 float* f4_data,
+                                 float* f5_data,
+                                 float* f6_data,
+                                 float* f7_data,
+                                 float* f8_data,
+                                 int* solid_data);
 
-__global__ void get_rgba_kernel( int pitch, int ncol, float minvar, float maxvar,
-                                 float *plot_data,
-                                 unsigned int *plot_rgba_data,
-                                 unsigned int *cmap_rgba_data,
-                                 int *solid_data);
+__global__ void get_rgba_kernel(int pitch,
+                                int ncol,
+                                float minvar,
+                                float maxvar,
+                                float* plot_data,
+                                unsigned int* plot_rgba_data,
+                                unsigned int* cmap_rgba_data,
+                                int* solid_data);
 
 // CUDA kernel C wrappers
 void stream(void);
@@ -122,20 +161,20 @@ void apply_Periodic_BC(void);
 void apply_BCs(void);
 void get_rgba(void);
 
-int main(int argc, char **argv)
+int main(int argc, char** argv)
 {
     float rcol, gcol, bcol;
 
-    FILE *fp_col;
+    FILE* fp_col;
     cudaChannelFormatDesc desc;
 
     // The following parameters are usually read from a file, but
     // hard code them for the demo:
-    ni    = 320 * 8;
-    nj    = 112 * 16;
-    vxin  = 0.04;
+    ni = 320 * 8;
+    nj = 112 * 16;
+    vxin = 0.04;
     roout = 1.0;
-    tau   = 0.51;
+    tau = 0.51;
 
     // Write parameters to screen
     printf("ni = %d\n", ni);
@@ -157,25 +196,25 @@ int main(int argc, char **argv)
     f7 = (float*)malloc(ni * nj * sizeof(float));
     f8 = (float*)malloc(ni * nj * sizeof(float));
 
-    plot  = (float*)malloc(ni * nj * sizeof(float));
+    plot = (float*)malloc(ni * nj * sizeof(float));
 
-    solid = (int*)malloc(ni*nj*sizeof(int));
+    solid = (int*)malloc(ni * nj * sizeof(int));
 
-    plot_rgba = (unsigned int*)malloc(ni*nj*sizeof(unsigned int));
+    plot_rgba = (unsigned int*)malloc(ni * nj * sizeof(unsigned int));
 
     // Allocate memory on device
-    checkCuda(cudaMallocPitch((void**)&f0_data, &pitch, sizeof(float)*ni, nj));
-    checkCuda(cudaMallocPitch((void**)&f1_data, &pitch, sizeof(float)*ni, nj));
-    checkCuda(cudaMallocPitch((void**)&f2_data, &pitch, sizeof(float)*ni, nj));
-    checkCuda(cudaMallocPitch((void**)&f3_data, &pitch, sizeof(float)*ni, nj));
-    checkCuda(cudaMallocPitch((void**)&f4_data, &pitch, sizeof(float)*ni, nj));
-    checkCuda(cudaMallocPitch((void**)&f5_data, &pitch, sizeof(float)*ni, nj));
-    checkCuda(cudaMallocPitch((void**)&f6_data, &pitch, sizeof(float)*ni, nj));
-    checkCuda(cudaMallocPitch((void**)&f7_data, &pitch, sizeof(float)*ni, nj));
-    checkCuda(cudaMallocPitch((void**)&f8_data, &pitch, sizeof(float)*ni, nj));
-    checkCuda(cudaMallocPitch((void**)&plot_data, &pitch, sizeof(float)*ni, nj));
+    checkCuda(cudaMallocPitch((void**)&f0_data, &pitch, sizeof(float) * ni, nj));
+    checkCuda(cudaMallocPitch((void**)&f1_data, &pitch, sizeof(float) * ni, nj));
+    checkCuda(cudaMallocPitch((void**)&f2_data, &pitch, sizeof(float) * ni, nj));
+    checkCuda(cudaMallocPitch((void**)&f3_data, &pitch, sizeof(float) * ni, nj));
+    checkCuda(cudaMallocPitch((void**)&f4_data, &pitch, sizeof(float) * ni, nj));
+    checkCuda(cudaMallocPitch((void**)&f5_data, &pitch, sizeof(float) * ni, nj));
+    checkCuda(cudaMallocPitch((void**)&f6_data, &pitch, sizeof(float) * ni, nj));
+    checkCuda(cudaMallocPitch((void**)&f7_data, &pitch, sizeof(float) * ni, nj));
+    checkCuda(cudaMallocPitch((void**)&f8_data, &pitch, sizeof(float) * ni, nj));
+    checkCuda(cudaMallocPitch((void**)&plot_data, &pitch, sizeof(float) * ni, nj));
 
-    checkCuda(cudaMallocPitch((void**)&solid_data, &pitch, sizeof(int)*ni, nj));
+    checkCuda(cudaMallocPitch((void**)&solid_data, &pitch, sizeof(int) * ni, nj));
 
     desc = cudaCreateChannelDesc<float>();
     checkCuda(cudaMallocArray(&f1_array, &desc, ni, nj));
@@ -195,68 +234,135 @@ int main(int argc, char **argv)
     // Initialise f's
     for (int i = 0; i < totpoints; i++)
     {
-    	f0[i] = faceq1 * roout * (1.0f                              - 1.5f*vxin*vxin);
-    	f1[i] = faceq2 * roout * (1.0f + 3.0f*vxin + 4.5f*vxin*vxin - 1.5f*vxin*vxin);
-    	f2[i] = faceq2 * roout * (1.0f                              - 1.5f*vxin*vxin);
-    	f3[i] = faceq2 * roout * (1.0f - 3.0f*vxin + 4.5f*vxin*vxin - 1.5f*vxin*vxin);
-    	f4[i] = faceq2 * roout * (1.0f                              - 1.5f*vxin*vxin);
-    	f5[i] = faceq3 * roout * (1.0f + 3.0f*vxin + 4.5f*vxin*vxin - 1.5f*vxin*vxin);
-    	f6[i] = faceq3 * roout * (1.0f - 3.0f*vxin + 4.5f*vxin*vxin - 1.5f*vxin*vxin);
-    	f7[i] = faceq3 * roout * (1.0f - 3.0f*vxin + 4.5f*vxin*vxin - 1.5f*vxin*vxin);
-    	f8[i] = faceq3 * roout * (1.0f + 3.0f*vxin + 4.5f*vxin*vxin - 1.5f*vxin*vxin);
-    	plot[i]  = vxin;
-    	solid[i] = 1;
+        f0[i] = faceq1 * roout * (1.0f - 1.5f * vxin * vxin);
+        f1[i] = faceq2 * roout * (1.0f + 3.0f * vxin + 4.5f * vxin * vxin - 1.5f * vxin * vxin);
+        f2[i] = faceq2 * roout * (1.0f - 1.5f * vxin * vxin);
+        f3[i] = faceq2 * roout * (1.0f - 3.0f * vxin + 4.5f * vxin * vxin - 1.5f * vxin * vxin);
+        f4[i] = faceq2 * roout * (1.0f - 1.5f * vxin * vxin);
+        f5[i] = faceq3 * roout * (1.0f + 3.0f * vxin + 4.5f * vxin * vxin - 1.5f * vxin * vxin);
+        f6[i] = faceq3 * roout * (1.0f - 3.0f * vxin + 4.5f * vxin * vxin - 1.5f * vxin * vxin);
+        f7[i] = faceq3 * roout * (1.0f - 3.0f * vxin + 4.5f * vxin * vxin - 1.5f * vxin * vxin);
+        f8[i] = faceq3 * roout * (1.0f + 3.0f * vxin + 4.5f * vxin * vxin - 1.5f * vxin * vxin);
+        plot[i] = vxin;
+        solid[i] = 1;
     }
 
     // Read in colourmap data for OpenGL display
-    fp_col = fopen("cmap.dat","r");
+    fp_col = fopen("cmap.dat", "r");
     if (fp_col == NULL)
     {
-    	printf("Error: can't open cmap.dat \n");
-    	return 1;
+        printf("Error: can't open cmap.dat \n");
+        return 1;
     }
 
     fscanf(fp_col, "%d", &ncol);
-    cmap_rgba = (unsigned int *)malloc(ncol*sizeof(unsigned int));
-    checkCuda(cudaMalloc((void**)&cmap_rgba_data, sizeof(unsigned int)*ncol));
+    cmap_rgba = (unsigned int*)malloc(ncol * sizeof(unsigned int));
+    checkCuda(cudaMalloc((void**)&cmap_rgba_data, sizeof(unsigned int) * ncol));
 
-    for (int i=0; i < ncol; i++)
+    for (int i = 0; i < ncol; i++)
     {
-    	fscanf(fp_col, "%f%f%f", &rcol, &gcol, &bcol);
-    	cmap_rgba[i] = ((int)(255.0f) << 24) | // convert colourmap to int
-    	               ((int)(bcol * 255.0f) << 16) |
-                       ((int)(gcol * 255.0f) <<  8) |
-                       ((int)(rcol * 255.0f) <<  0);
+        fscanf(fp_col, "%f%f%f", &rcol, &gcol, &bcol);
+        cmap_rgba[i] = ((int)(255.0f) << 24) | // convert colourmap to int
+                       ((int)(bcol * 255.0f) << 16) | ((int)(gcol * 255.0f) << 8)
+                       | ((int)(rcol * 255.0f) << 0);
     }
     fclose(fp_col);
 
     // Transfer initial data to device
-    checkCuda(cudaMemcpy2D((void*)f0_data, pitch, (void*)f0, sizeof(float)*ni,sizeof(float)*ni, nj, cudaMemcpyHostToDevice));
-    checkCuda(cudaMemcpy2D((void*)f1_data, pitch, (void*)f1, sizeof(float)*ni,sizeof(float)*ni, nj, cudaMemcpyHostToDevice));
-    checkCuda(cudaMemcpy2D((void*)f2_data, pitch, (void*)f2, sizeof(float)*ni,sizeof(float)*ni, nj, cudaMemcpyHostToDevice));
-    checkCuda(cudaMemcpy2D((void*)f3_data, pitch, (void*)f3, sizeof(float)*ni,sizeof(float)*ni, nj, cudaMemcpyHostToDevice));
-    checkCuda(cudaMemcpy2D((void*)f4_data, pitch, (void*)f4, sizeof(float)*ni,sizeof(float)*ni, nj, cudaMemcpyHostToDevice));
-    checkCuda(cudaMemcpy2D((void*)f5_data, pitch, (void*)f5, sizeof(float)*ni,sizeof(float)*ni, nj, cudaMemcpyHostToDevice));
-    checkCuda(cudaMemcpy2D((void*)f6_data, pitch, (void*)f6, sizeof(float)*ni,sizeof(float)*ni, nj, cudaMemcpyHostToDevice));
-    checkCuda(cudaMemcpy2D((void*)f7_data, pitch, (void*)f7, sizeof(float)*ni,sizeof(float)*ni, nj, cudaMemcpyHostToDevice));
-    checkCuda(cudaMemcpy2D((void*)f8_data, pitch, (void*)f8, sizeof(float)*ni,sizeof(float)*ni, nj, cudaMemcpyHostToDevice));
-    checkCuda(cudaMemcpy2D((void*)plot_data,  pitch, (void*)plot,  sizeof(float)*ni,sizeof(float)*ni, nj, cudaMemcpyHostToDevice));
-    checkCuda(cudaMemcpy2D((void*)solid_data, pitch, (void*)solid, sizeof(int)*ni,sizeof(int)*ni, nj,     cudaMemcpyHostToDevice));
-    checkCuda(cudaMemcpy((void*)cmap_rgba_data, (void*)cmap_rgba, sizeof(unsigned int)*ncol, cudaMemcpyHostToDevice));
+    checkCuda(cudaMemcpy2D((void*)f0_data,
+                           pitch,
+                           (void*)f0,
+                           sizeof(float) * ni,
+                           sizeof(float) * ni,
+                           nj,
+                           cudaMemcpyHostToDevice));
+    checkCuda(cudaMemcpy2D((void*)f1_data,
+                           pitch,
+                           (void*)f1,
+                           sizeof(float) * ni,
+                           sizeof(float) * ni,
+                           nj,
+                           cudaMemcpyHostToDevice));
+    checkCuda(cudaMemcpy2D((void*)f2_data,
+                           pitch,
+                           (void*)f2,
+                           sizeof(float) * ni,
+                           sizeof(float) * ni,
+                           nj,
+                           cudaMemcpyHostToDevice));
+    checkCuda(cudaMemcpy2D((void*)f3_data,
+                           pitch,
+                           (void*)f3,
+                           sizeof(float) * ni,
+                           sizeof(float) * ni,
+                           nj,
+                           cudaMemcpyHostToDevice));
+    checkCuda(cudaMemcpy2D((void*)f4_data,
+                           pitch,
+                           (void*)f4,
+                           sizeof(float) * ni,
+                           sizeof(float) * ni,
+                           nj,
+                           cudaMemcpyHostToDevice));
+    checkCuda(cudaMemcpy2D((void*)f5_data,
+                           pitch,
+                           (void*)f5,
+                           sizeof(float) * ni,
+                           sizeof(float) * ni,
+                           nj,
+                           cudaMemcpyHostToDevice));
+    checkCuda(cudaMemcpy2D((void*)f6_data,
+                           pitch,
+                           (void*)f6,
+                           sizeof(float) * ni,
+                           sizeof(float) * ni,
+                           nj,
+                           cudaMemcpyHostToDevice));
+    checkCuda(cudaMemcpy2D((void*)f7_data,
+                           pitch,
+                           (void*)f7,
+                           sizeof(float) * ni,
+                           sizeof(float) * ni,
+                           nj,
+                           cudaMemcpyHostToDevice));
+    checkCuda(cudaMemcpy2D((void*)f8_data,
+                           pitch,
+                           (void*)f8,
+                           sizeof(float) * ni,
+                           sizeof(float) * ni,
+                           nj,
+                           cudaMemcpyHostToDevice));
+    checkCuda(cudaMemcpy2D((void*)plot_data,
+                           pitch,
+                           (void*)plot,
+                           sizeof(float) * ni,
+                           sizeof(float) * ni,
+                           nj,
+                           cudaMemcpyHostToDevice));
+    checkCuda(cudaMemcpy2D((void*)solid_data,
+                           pitch,
+                           (void*)solid,
+                           sizeof(int) * ni,
+                           sizeof(int) * ni,
+                           nj,
+                           cudaMemcpyHostToDevice));
+    checkCuda(cudaMemcpy((void*)cmap_rgba_data,
+                         (void*)cmap_rgba,
+                         sizeof(unsigned int) * ncol,
+                         cudaMemcpyHostToDevice));
 
     // Initialise OpenGL display - use glut
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB);
-    glutInitWindowSize(ni, nj);                   // Window of ni x nj pixels
-    glutInitWindowPosition(50, 50);               // Window position
-    glutCreateWindow("CUDA 2D LB");               // Window title
+    glutInitWindowSize(ni, nj);     // Window of ni x nj pixels
+    glutInitWindowPosition(50, 50); // Window position
+    glutCreateWindow("CUDA 2D LB"); // Window title
 
     printf("Loading extensions: %s\n", glewGetErrorString(glewInit()));
-    if(!glewIsSupported(
-                        "GL_VERSION_2_0 "
-                        "GL_ARB_pixel_buffer_object "
-                        "GL_EXT_framebuffer_object "
-                        )){
+    if (!glewIsSupported("GL_VERSION_2_0 "
+                         "GL_ARB_pixel_buffer_object "
+                         "GL_EXT_framebuffer_object "))
+    {
         fprintf(stderr, "ERROR: Support for necessary OpenGL extensions missing.");
         fflush(stderr);
         return 1;
@@ -266,25 +372,24 @@ int main(int argc, char **argv)
     glClearColor(0.0, 0.0, 0.0, 0.0);
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-    glOrtho(0,ni,0.,nj, -200.0, 200.0);
+    glOrtho(0, ni, 0., nj, -200.0, 200.0);
 
     // Create texture and bind to gl_Tex
     glEnable(GL_TEXTURE_2D);
-    glGenTextures(1, &gl_Tex);                     // Generate 2D texture
-    glBindTexture(GL_TEXTURE_2D, gl_Tex);          // bind to gl_Tex
+    glGenTextures(1, &gl_Tex);            // Generate 2D texture
+    glBindTexture(GL_TEXTURE_2D, gl_Tex); // bind to gl_Tex
     // texture properties:
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, ni, nj, 0,
-                 GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, ni, nj, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
     printf("Texture created.\n");
 
     // Create pixel buffer object and bind to gl_PBO
     glGenBuffers(1, &gl_PBO);
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER_ARB, gl_PBO);
-    glBufferData(GL_PIXEL_UNPACK_BUFFER_ARB, pitch*nj, NULL, GL_STREAM_COPY);
+    glBufferData(GL_PIXEL_UNPACK_BUFFER_ARB, pitch * nj, NULL, GL_STREAM_COPY);
     checkCuda(cudaGLRegisterBufferObject(gl_PBO));
     printf("Buffer created.\n");
 
@@ -301,25 +406,31 @@ int main(int argc, char **argv)
 }
 
 // CUDA kernel
-__global__ void stream_kernel( int pitch, float *f1_data, float *f2_data,
-                               float *f3_data, float *f4_data, float *f5_data,
-			                   float *f6_data, float *f7_data, float *f8_data)
+__global__ void stream_kernel(int pitch,
+                              float* f1_data,
+                              float* f2_data,
+                              float* f3_data,
+                              float* f4_data,
+                              float* f5_data,
+                              float* f6_data,
+                              float* f7_data,
+                              float* f8_data)
 {
     int i = blockIdx.x * TILE_I + threadIdx.x;
     int j = blockIdx.y * TILE_J + threadIdx.y;
 
-    int i2d = i + j*pitch/sizeof(float);
+    int i2d = i + j * pitch / sizeof(float);
 
     // look up the adjacent f's needed for streaming using textures
     // i.e. gather from textures, write to device memory: f1_data, etc
-    f1_data[i2d] = tex2D(f1_tex, (float) (i-1), (float) j);
-    f2_data[i2d] = tex2D(f2_tex, (float) i    , (float) (j-1));
-    f3_data[i2d] = tex2D(f3_tex, (float) (i+1), (float) j);
-    f4_data[i2d] = tex2D(f4_tex, (float) i    , (float) (j+1));
-    f5_data[i2d] = tex2D(f5_tex, (float) (i-1), (float) (j-1));
-    f6_data[i2d] = tex2D(f6_tex, (float) (i+1), (float) (j-1));
-    f7_data[i2d] = tex2D(f7_tex, (float) (i+1), (float) (j+1));
-    f8_data[i2d] = tex2D(f8_tex, (float) (i-1), (float) (j+1));
+    f1_data[i2d] = tex2D(f1_tex, (float)(i - 1), (float)j);
+    f2_data[i2d] = tex2D(f2_tex, (float)i, (float)(j - 1));
+    f3_data[i2d] = tex2D(f3_tex, (float)(i + 1), (float)j);
+    f4_data[i2d] = tex2D(f4_tex, (float)i, (float)(j + 1));
+    f5_data[i2d] = tex2D(f5_tex, (float)(i - 1), (float)(j - 1));
+    f6_data[i2d] = tex2D(f6_tex, (float)(i + 1), (float)(j - 1));
+    f7_data[i2d] = tex2D(f7_tex, (float)(i + 1), (float)(j + 1));
+    f8_data[i2d] = tex2D(f8_tex, (float)(i - 1), (float)(j + 1));
 }
 
 // C wrapper
@@ -327,14 +438,70 @@ void stream(void)
 {
     // Device-to-device mem-copies to transfer data from linear memory (f1_data)
     // to CUDA format memory (f1_array) so we can use these in textures
-    checkCuda(cudaMemcpy2DToArray(f1_array, 0, 0, (void*)f1_data, pitch, sizeof(float)*ni, nj, cudaMemcpyDeviceToDevice));
-    checkCuda(cudaMemcpy2DToArray(f2_array, 0, 0, (void*)f2_data, pitch, sizeof(float)*ni, nj, cudaMemcpyDeviceToDevice));
-    checkCuda(cudaMemcpy2DToArray(f3_array, 0, 0, (void*)f3_data, pitch, sizeof(float)*ni, nj, cudaMemcpyDeviceToDevice));
-    checkCuda(cudaMemcpy2DToArray(f4_array, 0, 0, (void*)f4_data, pitch, sizeof(float)*ni, nj, cudaMemcpyDeviceToDevice));
-    checkCuda(cudaMemcpy2DToArray(f5_array, 0, 0, (void*)f5_data, pitch, sizeof(float)*ni, nj, cudaMemcpyDeviceToDevice));
-    checkCuda(cudaMemcpy2DToArray(f6_array, 0, 0, (void*)f6_data, pitch, sizeof(float)*ni, nj, cudaMemcpyDeviceToDevice));
-    checkCuda(cudaMemcpy2DToArray(f7_array, 0, 0, (void*)f7_data, pitch, sizeof(float)*ni, nj, cudaMemcpyDeviceToDevice));
-    checkCuda(cudaMemcpy2DToArray(f8_array, 0, 0, (void*)f8_data, pitch, sizeof(float)*ni, nj, cudaMemcpyDeviceToDevice));
+    checkCuda(cudaMemcpy2DToArray(f1_array,
+                                  0,
+                                  0,
+                                  (void*)f1_data,
+                                  pitch,
+                                  sizeof(float) * ni,
+                                  nj,
+                                  cudaMemcpyDeviceToDevice));
+    checkCuda(cudaMemcpy2DToArray(f2_array,
+                                  0,
+                                  0,
+                                  (void*)f2_data,
+                                  pitch,
+                                  sizeof(float) * ni,
+                                  nj,
+                                  cudaMemcpyDeviceToDevice));
+    checkCuda(cudaMemcpy2DToArray(f3_array,
+                                  0,
+                                  0,
+                                  (void*)f3_data,
+                                  pitch,
+                                  sizeof(float) * ni,
+                                  nj,
+                                  cudaMemcpyDeviceToDevice));
+    checkCuda(cudaMemcpy2DToArray(f4_array,
+                                  0,
+                                  0,
+                                  (void*)f4_data,
+                                  pitch,
+                                  sizeof(float) * ni,
+                                  nj,
+                                  cudaMemcpyDeviceToDevice));
+    checkCuda(cudaMemcpy2DToArray(f5_array,
+                                  0,
+                                  0,
+                                  (void*)f5_data,
+                                  pitch,
+                                  sizeof(float) * ni,
+                                  nj,
+                                  cudaMemcpyDeviceToDevice));
+    checkCuda(cudaMemcpy2DToArray(f6_array,
+                                  0,
+                                  0,
+                                  (void*)f6_data,
+                                  pitch,
+                                  sizeof(float) * ni,
+                                  nj,
+                                  cudaMemcpyDeviceToDevice));
+    checkCuda(cudaMemcpy2DToArray(f7_array,
+                                  0,
+                                  0,
+                                  (void*)f7_data,
+                                  pitch,
+                                  sizeof(float) * ni,
+                                  nj,
+                                  cudaMemcpyDeviceToDevice));
+    checkCuda(cudaMemcpy2DToArray(f8_array,
+                                  0,
+                                  0,
+                                  (void*)f8_data,
+                                  pitch,
+                                  sizeof(float) * ni,
+                                  nj,
+                                  cudaMemcpyDeviceToDevice));
 
     // Tell CUDA that we want to use f1_array etc as textures. Also
     // define what type of interpolation we want (nearest point)
@@ -362,11 +529,18 @@ void stream(void)
     f8_tex.filterMode = cudaFilterModePoint;
     checkCuda(cudaBindTextureToArray(f8_tex, f8_array));
 
-    dim3 grid  = dim3(ni/TILE_I, nj/TILE_J);
+    dim3 grid = dim3(ni / TILE_I, nj / TILE_J);
     dim3 block = dim3(TILE_I, TILE_J);
 
-    stream_kernel<<<grid, block>>>(pitch, f1_data, f2_data, f3_data, f4_data,
-                                   f5_data, f6_data, f7_data, f8_data);
+    stream_kernel<<<grid, block>>>(pitch,
+                                   f1_data,
+                                   f2_data,
+                                   f3_data,
+                                   f4_data,
+                                   f5_data,
+                                   f6_data,
+                                   f7_data,
+                                   f8_data);
 
     checkCuda(cudaUnbindTexture(f1_tex));
     checkCuda(cudaUnbindTexture(f2_tex));
@@ -378,17 +552,28 @@ void stream(void)
     checkCuda(cudaUnbindTexture(f8_tex));
 }
 
-__global__ void collide_kernel (int pitch, float tau, float faceq1, float faceq2, float faceq3,
-                                float *f0_data, float *f1_data, float *f2_data,
-                                float *f3_data, float *f4_data, float *f5_data, float *f6_data,
-                                float *f7_data, float *f8_data, float *plot_data)
+__global__ void collide_kernel(int pitch,
+                               float tau,
+                               float faceq1,
+                               float faceq2,
+                               float faceq3,
+                               float* f0_data,
+                               float* f1_data,
+                               float* f2_data,
+                               float* f3_data,
+                               float* f4_data,
+                               float* f5_data,
+                               float* f6_data,
+                               float* f7_data,
+                               float* f8_data,
+                               float* plot_data)
 {
     int i = blockIdx.x * TILE_I + threadIdx.x;
     int j = blockIdx.y * TILE_J + threadIdx.y;
 
     int i2d = i + j * pitch / sizeof(float);
 
-    float rtau  = 1.0f / tau;
+    float rtau = 1.0f / tau;
     float rtau1 = 1.0f - rtau;
 
     // Read all f's and store in registers
@@ -403,7 +588,7 @@ __global__ void collide_kernel (int pitch, float tau, float faceq1, float faceq2
     float f8now = f8_data[i2d];
 
     // Macroscopic flow props:
-    float ro =  f0now + f1now + f2now + f3now + f4now + f5now + f6now + f7now + f8now;
+    float ro = f0now + f1now + f2now + f3now + f4now + f5now + f6now + f7now + f8now;
     float vx = (f1now - f3now + f5now - f6now - f7now + f8now) / ro;
     float vy = (f2now - f4now + f5now + f6now - f7now - f8now) / ro;
 
@@ -413,14 +598,14 @@ __global__ void collide_kernel (int pitch, float tau, float faceq1, float faceq2
     // Calculate equilibrium f's
     float v_sq_term = 1.5f * (vx * vx + vy * vy);
     float f0eq = ro * faceq1 * (1.f - v_sq_term);
-    float f1eq = ro * faceq2 * (1.f + 3.f*vx + 4.5f*vx*vx - v_sq_term);
-    float f2eq = ro * faceq2 * (1.f + 3.f*vy + 4.5f*vy*vy - v_sq_term);
-    float f3eq = ro * faceq2 * (1.f - 3.f*vx + 4.5f*vx*vx - v_sq_term);
-    float f4eq = ro * faceq2 * (1.f - 3.f*vy + 4.5f*vy*vy - v_sq_term);
-    float f5eq = ro * faceq3 * (1.f + 3.f*(vx + vy) + 4.5f*(vx + vy)*(vx + vy) - v_sq_term);
-    float f6eq = ro * faceq3 * (1.f + 3.f*(-vx + vy) + 4.5f*(-vx + vy)*(-vx + vy) - v_sq_term);
-    float f7eq = ro * faceq3 * (1.f + 3.f*(-vx - vy) + 4.5f*(-vx - vy)*(-vx - vy) - v_sq_term);
-    float f8eq = ro * faceq3 * (1.f + 3.f*(vx - vy) + 4.5f*(vx - vy)*(vx - vy) - v_sq_term);
+    float f1eq = ro * faceq2 * (1.f + 3.f * vx + 4.5f * vx * vx - v_sq_term);
+    float f2eq = ro * faceq2 * (1.f + 3.f * vy + 4.5f * vy * vy - v_sq_term);
+    float f3eq = ro * faceq2 * (1.f - 3.f * vx + 4.5f * vx * vx - v_sq_term);
+    float f4eq = ro * faceq2 * (1.f - 3.f * vy + 4.5f * vy * vy - v_sq_term);
+    float f5eq = ro * faceq3 * (1.f + 3.f * (vx + vy) + 4.5f * (vx + vy) * (vx + vy) - v_sq_term);
+    float f6eq = ro * faceq3 * (1.f + 3.f * (-vx + vy) + 4.5f * (-vx + vy) * (-vx + vy) - v_sq_term);
+    float f7eq = ro * faceq3 * (1.f + 3.f * (-vx - vy) + 4.5f * (-vx - vy) * (-vx - vy) - v_sq_term);
+    float f8eq = ro * faceq3 * (1.f + 3.f * (vx - vy) + 4.5f * (vx - vy) * (vx - vy) - v_sq_term);
 
     // Do collisions
     f0_data[i2d] = rtau1 * f0now + rtau * f0eq;
@@ -436,21 +621,44 @@ __global__ void collide_kernel (int pitch, float tau, float faceq1, float faceq2
 
 void collide(void)
 {
-    dim3 grid  = dim3(ni/TILE_I, nj/TILE_J);
+    dim3 grid = dim3(ni / TILE_I, nj / TILE_J);
     dim3 block = dim3(TILE_I, TILE_J);
 
-    collide_kernel<<<grid, block>>>(pitch, tau, faceq1, faceq2, faceq3,
-                                    f0_data, f1_data, f2_data, f3_data, f4_data,
-                                    f5_data, f6_data, f7_data, f8_data, plot_data);
+    collide_kernel<<<grid, block>>>(pitch,
+                                    tau,
+                                    faceq1,
+                                    faceq2,
+                                    faceq3,
+                                    f0_data,
+                                    f1_data,
+                                    f2_data,
+                                    f3_data,
+                                    f4_data,
+                                    f5_data,
+                                    f6_data,
+                                    f7_data,
+                                    f8_data,
+                                    plot_data);
 }
 
 // CUDA kernel all BC's apart from periodic boundaries:
-__global__ void apply_BCs_kernel( int ni, int nj, int pitch, float vxin, float roout,
-                                  float faceq2, float faceq3,
-                                  float *f0_data, float *f1_data, float *f2_data,
-                                  float *f3_data, float *f4_data, float *f5_data,
-                                  float *f6_data, float *f7_data, float *f8_data,
-				                  int* solid_data)
+__global__ void apply_BCs_kernel(int ni,
+                                 int nj,
+                                 int pitch,
+                                 float vxin,
+                                 float roout,
+                                 float faceq2,
+                                 float faceq3,
+                                 float* f0_data,
+                                 float* f1_data,
+                                 float* f2_data,
+                                 float* f3_data,
+                                 float* f4_data,
+                                 float* f5_data,
+                                 float* f6_data,
+                                 float* f7_data,
+                                 float* f8_data,
+                                 int* solid_data)
 {
     int i = blockIdx.x * TILE_I + threadIdx.x;
     int j = blockIdx.y * TILE_J + threadIdx.y;
@@ -484,9 +692,9 @@ __global__ void apply_BCs_kernel( int ni, int nj, int pitch, float vxin, float r
     {
         float v_sq_term = 1.5f * (vxin * vxin);
 
-        f1_data[i2d] = roout * faceq2 * (1.f + 3.f*vxin + 3.f*v_sq_term);
-        f5_data[i2d] = roout * faceq3 * (1.f + 3.f*vxin + 3.f*v_sq_term);
-        f8_data[i2d] = roout * faceq3 * (1.f + 3.f*vxin + 3.f*v_sq_term);
+        f1_data[i2d] = roout * faceq2 * (1.f + 3.f * vxin + 3.f * v_sq_term);
+        f5_data[i2d] = roout * faceq3 * (1.f + 3.f * vxin + 3.f * v_sq_term);
+        f8_data[i2d] = roout * faceq3 * (1.f + 3.f * vxin + 3.f * v_sq_term);
     }
 
     // Exit BC - very crude
@@ -501,27 +709,46 @@ __global__ void apply_BCs_kernel( int ni, int nj, int pitch, float vxin, float r
 
 void apply_BCs()
 {
-    dim3 grid  = dim3(ni/TILE_I, nj/TILE_J);
+    dim3 grid = dim3(ni / TILE_I, nj / TILE_J);
     dim3 block = dim3(TILE_I, TILE_J);
 
-    apply_BCs_kernel<<<grid, block>>>( ni, nj, pitch, vxin, roout, faceq2,faceq3,
-                                       f0_data, f1_data, f2_data,
-                                       f3_data, f4_data, f5_data,
-                                       f6_data, f7_data, f8_data, solid_data);
+    apply_BCs_kernel<<<grid, block>>>(ni,
+                                      nj,
+                                      pitch,
+                                      vxin,
+                                      roout,
+                                      faceq2,
+                                      faceq3,
+                                      f0_data,
+                                      f1_data,
+                                      f2_data,
+                                      f3_data,
+                                      f4_data,
+                                      f5_data,
+                                      f6_data,
+                                      f7_data,
+                                      f8_data,
+                                      solid_data);
 }
 
-__global__ void apply_Periodic_BC_kernel( int ni, int nj, int pitch,
-					                      float *f2_data, float *f4_data, float *f5_data,
-                                          float *f6_data, float *f7_data, float *f8_data)
+__global__ void apply_Periodic_BC_kernel(int ni,
+                                         int nj,
+                                         int pitch,
+                                         float* f2_data,
+                                         float* f4_data,
+                                         float* f5_data,
+                                         float* f6_data,
+                                         float* f7_data,
+                                         float* f8_data)
 {
     int i = blockIdx.x * TILE_I + threadIdx.x;
     int j = blockIdx.y * TILE_J + threadIdx.y;
 
-    int i2d = i + j*pitch/sizeof(float);
+    int i2d = i + j * pitch / sizeof(float);
 
     if (j == 0)
     {
-        int i2d2 = i + (nj-1)*pitch/sizeof(float);
+        int i2d2 = i + (nj - 1) * pitch / sizeof(float);
         f2_data[i2d] = f2_data[i2d2];
         f5_data[i2d] = f5_data[i2d2];
         f6_data[i2d] = f6_data[i2d2];
@@ -538,39 +765,53 @@ __global__ void apply_Periodic_BC_kernel( int ni, int nj, int pitch,
 // C wrapper
 void apply_Periodic_BC(void)
 {
-    dim3 grid  = dim3(ni/TILE_I, nj/TILE_J);
+    dim3 grid = dim3(ni / TILE_I, nj / TILE_J);
     dim3 block = dim3(TILE_I, TILE_J);
 
-    apply_Periodic_BC_kernel<<<grid, block>>>(ni, nj, pitch,
-					      f2_data,f4_data, f5_data,
-					      f6_data, f7_data, f8_data);
+    apply_Periodic_BC_kernel<<<grid, block>>>(ni,
+                                              nj,
+                                              pitch,
+                                              f2_data,
+                                              f4_data,
+                                              f5_data,
+                                              f6_data,
+                                              f7_data,
+                                              f8_data);
 }
 
 // CUDA kernel to fill plot_rgba_data array for plotting
-__global__ void get_rgba_kernel (int pitch, int ncol, float minvar, float maxvar,
-                                 float *plot_data,
-                                 unsigned int *plot_rgba_data,
-                                 unsigned int *cmap_rgba_data,
-                                 int *solid_data)
+__global__ void get_rgba_kernel(int pitch,
+                                int ncol,
+                                float minvar,
+                                float maxvar,
+                                float* plot_data,
+                                unsigned int* plot_rgba_data,
+                                unsigned int* cmap_rgba_data,
+                                int* solid_data)
 {
     int i = blockIdx.x * TILE_I + threadIdx.x;
     int j = blockIdx.y * TILE_J + threadIdx.y;
 
-    int i2d = i + j*pitch/sizeof(float);
+    int i2d = i + j * pitch / sizeof(float);
 
-    float frac = (plot_data[i2d]-minvar)/(maxvar-minvar);
-    int   icol = (int)(frac * (float)ncol);
+    float frac = (plot_data[i2d] - minvar) / (maxvar - minvar);
+    int icol = (int)(frac * (float)ncol);
     plot_rgba_data[i2d] = solid_data[i2d] * cmap_rgba_data[icol];
 }
 
 // C wrapper
 void get_rgba()
 {
-    dim3 grid  = dim3(ni/TILE_I, nj/TILE_J);
+    dim3 grid = dim3(ni / TILE_I, nj / TILE_J);
     dim3 block = dim3(TILE_I, TILE_J);
 
-    get_rgba_kernel<<<grid, block>>>(pitch, ncol, minvar, maxvar,
-				     plot_data, plot_rgba_data, cmap_rgba_data,
+    get_rgba_kernel<<<grid, block>>>(pitch,
+                                     ncol,
+                                     minvar,
+                                     maxvar,
+                                     plot_data,
+                                     plot_rgba_data,
+                                     cmap_rgba_data,
                                      solid_data);
 }
 
@@ -595,20 +836,20 @@ void display(void)
     cudaGLUnmapBufferObject(gl_PBO);
 
     // Copy the pixel buffer to the texture, ready to display
-    glTexSubImage2D(GL_TEXTURE_2D,0,0,0,ni,nj,GL_RGBA,GL_UNSIGNED_BYTE,0);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, ni, nj, GL_RGBA, GL_UNSIGNED_BYTE, 0);
 
     // Render one quad to the screen and colour it using our texture
     // i.e. plot our plotvar data to the screen
     glClear(GL_COLOR_BUFFER_BIT);
     glBegin(GL_QUADS);
-    glTexCoord2f (0.0, 0.0);
-    glVertex3f (0.0, 0.0, 0.0);
-    glTexCoord2f (1.0, 0.0);
-    glVertex3f (ni, 0.0, 0.0);
-    glTexCoord2f (1.0, 1.0);
-    glVertex3f (ni, nj, 0.0);
-    glTexCoord2f (0.0, 1.0);
-    glVertex3f (0.0, nj, 0.0);
+    glTexCoord2f(0.0, 0.0);
+    glVertex3f(0.0, 0.0, 0.0);
+    glTexCoord2f(1.0, 0.0);
+    glVertex3f(ni, 0.0, 0.0);
+    glTexCoord2f(1.0, 1.0);
+    glVertex3f(ni, nj, 0.0);
+    glTexCoord2f(0.0, 1.0);
+    glVertex3f(0.0, nj, 0.0);
     glEnd();
     glutSwapBuffers();
 }
@@ -618,25 +859,27 @@ void resize(int w, int h)
 {
     width = w;
     height = h;
-    glViewport (0, 0, w, h);
-    glMatrixMode (GL_PROJECTION);
-    glLoadIdentity ();
-    glOrtho (0., ni, 0., nj, -200. ,200.);
-    glMatrixMode (GL_MODELVIEW);
-    glLoadIdentity ();
+    glViewport(0, 0, w, h);
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    glOrtho(0., ni, 0., nj, -200., 200.);
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
 }
 
 // GLUT mouse callback. Left button draws the solid, right button removes solid
 void mouse(int button, int state, int x, int y)
 {
-    if ((button == GLUT_LEFT_BUTTON) && (state == GLUT_DOWN)) {
+    if ((button == GLUT_LEFT_BUTTON) && (state == GLUT_DOWN))
+    {
         draw_solid_flag = 0;
         float xx = x;
         float yy = y;
         ipos_old = xx / width * ni;
-        jpos_old = (height-yy) / height * nj;
+        jpos_old = (height - yy) / height * nj;
     }
-    if ((button == GLUT_RIGHT_BUTTON) && (state == GLUT_DOWN)) {
+    if ((button == GLUT_RIGHT_BUTTON) && (state == GLUT_DOWN))
+    {
         draw_solid_flag = 1;
         float xx = x;
         float yy = y;
@@ -653,8 +896,8 @@ void mouse_motion(int x, int y)
 {
     float xx = x;
     float yy = y;
-    int ipos=(int)(xx/width*(float)ni);
-    int jpos=(int)((height-yy)/height*(float)nj);
+    int ipos = (int)(xx / width * (float)ni);
+    int jpos = (int)((height - yy) / height * (float)nj);
 
     int i1 = 0, i2 = 0, j1 = 0, j2 = 0;
 
@@ -680,8 +923,8 @@ void mouse_motion(int x, int y)
         int jnext = 0;
         if (i1 != i2)
         {
-            float frac = (float)(i-i1)/(float)(i2-i1);
-            jnext = (int)(frac*(j2-j1))+j1;
+            float frac = (float)(i - i1) / (float)(i2 - i1);
+            jnext = (int)(frac * (j2 - j1)) + j1;
         }
         else
         {
@@ -689,27 +932,31 @@ void mouse_motion(int x, int y)
         }
         if (jnext >= jlast)
         {
-            solid[I2D(ni,i,jlast)] = draw_solid_flag;
+            solid[I2D(ni, i, jlast)] = draw_solid_flag;
             for (int j = jlast; j <= jnext; j++)
             {
-                solid[I2D(ni,i,j)] = draw_solid_flag;
+                solid[I2D(ni, i, j)] = draw_solid_flag;
             }
         }
         else
         {
-            solid[I2D(ni,i,jlast)] = draw_solid_flag;
+            solid[I2D(ni, i, jlast)] = draw_solid_flag;
             for (int j = jnext; j <= jlast; j++)
             {
-                solid[I2D(ni,i,j)]=draw_solid_flag;
+                solid[I2D(ni, i, j)] = draw_solid_flag;
             }
         }
         jlast = jnext;
     }
 
     // Copy the solid array (host) to the solid_data array (device)
-    cudaMemcpy2D( (void*)solid_data, pitch, (void*)solid,
-                  sizeof(int)*ni,sizeof(int)*ni, nj,
-                  cudaMemcpyHostToDevice);
-    ipos_old=ipos;
-    jpos_old=jpos;
+    cudaMemcpy2D((void*)solid_data,
+                 pitch,
+                 (void*)solid,
+                 sizeof(int) * ni,
+                 sizeof(int) * ni,
+                 nj,
+                 cudaMemcpyHostToDevice);
+    ipos_old = ipos;
+    jpos_old = jpos;
 }
