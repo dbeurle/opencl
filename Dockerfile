@@ -3,7 +3,7 @@ FROM fedora:28
 
 RUN dnf update -y
 # Compilers and build system
-RUN dnf install -y wget cmake clang clang-tools-extra libomp-devel gcc-c++
+RUN dnf install -y wget cmake make clang clang-tools-extra libomp-devel gcc-c++
 
 # OpenCL runtimes
 RUN dnf install -y ocl-icd clpeak clinfo
