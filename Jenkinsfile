@@ -10,7 +10,8 @@ pipeline {
             }
             steps {
                 sh '''
-                cd saxpy
+                cd saxpy && mkdir build && cd build
+                cmake .. && make all
                 '''
             }
         }
