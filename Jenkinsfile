@@ -17,7 +17,6 @@ pipeline {
             post {
                 success {
                     sh '''
-                        cd build
                         ./saxpy
                     '''
                 }
