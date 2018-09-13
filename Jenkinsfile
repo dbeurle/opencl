@@ -17,7 +17,7 @@ pipeline {
             post {
                 success {
                     sh '''
-                        ./saxpy
+                        ./saxpy/build/saxpy
                     '''
                 }
             }
