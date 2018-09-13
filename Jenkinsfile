@@ -14,6 +14,14 @@ pipeline {
                 cmake .. && make all
                 '''
             }
+            post {
+                success {
+                    sh '''
+                        cd build
+                        ./saxpy
+                    '''
+                }
+            }
         }
     }
 }
