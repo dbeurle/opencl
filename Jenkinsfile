@@ -22,11 +22,7 @@ pipeline {
                     sh '''
                     cd saxpy && mkdir build && cd build
                     cmake .. && make all
-                    '''
-                }
-                success {
-                    sh '''
-                        ./saxpy/build/saxpy
+                    ./saxpy
                     '''
                 }
             }
