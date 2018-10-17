@@ -6,7 +6,7 @@ pipeline {
                  dockerfile {
                      filename 'Dockerfile'
                      additionalBuildArgs ''
-                     args '--user 1000 --device /dev/dri:/dev/dri'
+                     args '--device=/dev/dri --group-add video'
                  }
             }
             steps {
@@ -20,9 +20,7 @@ pipeline {
             post {
                 success {
                     sh '''
-                    cd saxpy && mkdir build && cd build
-                    cmake .. && make all
-                    ./saxpy
+                    ./saxpy/build/saxpy
                     '''
                 }
             }
