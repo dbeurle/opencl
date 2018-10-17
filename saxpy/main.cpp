@@ -29,12 +29,27 @@ int main(int const argc, char* argv[])
     std::vector<cl::Platform> platforms;
     cl::Platform::get(&platforms);
 
-    if (platforms.size() == 0)
+    if (platforms.empty())
     {
         throw std::domain_error("No OpenCL platforms found");
     }
 
-    std::cout << "Number of platforms: " << platforms.size() << "\n";
+    std::cout << "Number of unfiltered platforms: " << platforms.size() << "\n";
+
+    platforms
+        .erase(std::remove_if(begin(platforms),
+                              end(platforms),
+                              [](auto const& platform) {
+                                  std::vector<cl::Device> devices;
+                                  platform.getDevices(CL_DEVICE_TYPE_ALL, &devices);
+
+                                  return std::none_of(begin(devices), end(devices), [](cl::Device const& device) {
+                                      return device.getInfo<CL_DEVICE_AVAILABLE>()
+                                             || device.getInfo<CL_DEVICE_PREFERRED_VECTOR_WIDTH_DOUBLE>()
+                                                    > 0;
+                                  });
+                              }),
+               end(platforms));
 
     {
         std::int32_t platform_counter{0};
@@ -55,10 +70,9 @@ int main(int const argc, char* argv[])
 
     std::cout << "Using platform " << platformId << "\n";
 
-    // Create a stl vector to store all of the availbe devices to use from the first
-    // platform.
+    // Create a stl vector to store all of the available devices to use from the
+    // first platform.
     std::vector<cl::Device> devices;
-
     // Get the available devices from the platform.
     platforms[platformId].getDevices(CL_DEVICE_TYPE_ALL, &devices);
 
