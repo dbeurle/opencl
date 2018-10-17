@@ -6,7 +6,7 @@ pipeline {
                  dockerfile {
                      filename 'Dockerfile'
                      additionalBuildArgs ''
-                     args 'asdf --device=/dev/dri:/dev/dri'
+                     args '--device /dev/dri:/dev/dri'
                  }
             }
             steps {
