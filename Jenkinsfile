@@ -15,8 +15,16 @@ pipeline {
             post {
                 success {
                     sh '''
-                        ./saxpy/build/saxpy
+                    cd saxpy && mkdir build && cd build
+                    cmake .. && make all
                     '''
+                }
+                post {
+                    success {
+                        sh '''
+                            ./saxpy/build/saxpy
+                        '''
+                    }
                 }
             }
     }

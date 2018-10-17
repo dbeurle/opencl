@@ -90,13 +90,22 @@ int main(int const argc, char* argv[])
         throw std::domain_error("No OpenCL platforms found");
     }
 
-    std::cout << "Number of raw OpenCL platforms: " << platforms.size() << "\n";
-    remove_invalid(platforms);
-    std::cout << "Filtered number of platforms: " << platforms.size() << '\n';
+    std::cout << "Number of unfiltered platforms: " << platforms.size() << "\n";
 
-    // std::map<cl::Platform, std::vector<cl::Device>> platform_devices;
+    platforms
+        .erase(std::remove_if(begin(platforms),
+                              end(platforms),
+                              [](auto const& platform) {
+                                  std::vector<cl::Device> devices;
+                                  platform.getDevices(CL_DEVICE_TYPE_ALL, &devices);
 
-    cl::Device device;
+                                  return std::none_of(begin(devices), end(devices), [](cl::Device const& device) {
+                                      return device.getInfo<CL_DEVICE_AVAILABLE>()
+                                             || device.getInfo<CL_DEVICE_PREFERRED_VECTOR_WIDTH_DOUBLE>()
+                                                    > 0;
+                                  });
+                              }),
+               end(platforms));
 
     for (auto const& platform : platforms)
     {
