@@ -24,12 +24,10 @@ pipeline {
                     cmake .. && make all
                     '''
                 }
-                post {
-                    success {
-                        sh '''
-                            ./saxpy/build/saxpy
-                        '''
-                    }
+                success {
+                    sh '''
+                        ./saxpy/build/saxpy
+                    '''
                 }
             }
         }
