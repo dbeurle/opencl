@@ -6,7 +6,7 @@ pipeline {
                  dockerfile {
                      filename 'Dockerfile'
                      additionalBuildArgs ''
-                     args '--device=/dev/dri --group-add video'
+                     args '--device=/dev/dri:/dev/dri'
                  }
             }
             steps {
