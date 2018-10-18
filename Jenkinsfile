@@ -5,8 +5,6 @@ pipeline {
             agent {
                  dockerfile {
                      filename 'Dockerfile'
-                     additionalBuildArgs ''
-                     args '--device=/dev/dri:/dev/dri'
                  }
             }
             steps {
