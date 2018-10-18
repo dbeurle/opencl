@@ -92,6 +92,8 @@ int main(int const argc, char* argv[])
 
     std::cout << "Number of unfiltered platforms: " << platforms.size() << "\n";
 
+    cl::Device device;
+
     platforms
         .erase(std::remove_if(begin(platforms),
                               end(platforms),
